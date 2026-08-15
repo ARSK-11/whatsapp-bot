@@ -1,0 +1,162 @@
+╔══════════════════════════════════════════════════════════════════╗
+║         📱 cURL COMMANDS - Kirim ke Grup "Test_bot"              ║
+╚══════════════════════════════════════════════════════════════════╝
+
+🎯 COPY-PASTE LANGSUNG KE TERMINAL!
+
+═══════════════════════════════════════════════════════════════════
+
+1️⃣  PESAN SEDERHANA
+───────────────────────────────────────────────────────────────────
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"Halo grup Test_bot!"}'
+
+═══════════════════════════════════════════════════════════════════
+
+2️⃣  PESAN DENGAN EMOJI
+───────────────────────────────────────────────────────────────────
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"👋 Halo!\n\n✅ Test pesan dari bot\n🚀 Via API"}'
+
+═══════════════════════════════════════════════════════════════════
+
+3️⃣  PENGUMUMAN
+───────────────────────────────────────────────────────────────────
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"📢 PENGUMUMAN\n\nIni adalah test pengumuman dari bot WhatsApp.\n\n✅ Fitur grup sudah berjalan!\n📅 09/07/2026"}'
+
+═══════════════════════════════════════════════════════════════════
+
+4️⃣  UPDATE STATUS
+───────────────────────────────────────────────────────────────────
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"📊 STATUS UPDATE\n\n✅ Bot: Online\n✅ API: Ready\n✅ Fitur Grup: Active\n\n🎉 Semua sistem berjalan normal!"}'
+
+═══════════════════════════════════════════════════════════════════
+
+5️⃣  REMINDER
+───────────────────────────────────────────────────────────────────
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"⏰ REMINDER\n\nJangan lupa:\n📝 Testing fitur bot\n🔧 Cek dokumentasi\n📱 Report bug jika ada\n\nTerima kasih! 🙏"}'
+
+═══════════════════════════════════════════════════════════════════
+
+6️⃣  PESAN PANJANG / MULTI-LINE
+───────────────────────────────────────────────────────────────────
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"📝 TEST PESAN PANJANG\n\nBaris 1: Ini baris pertama\nBaris 2: Ini baris kedua\nBaris 3: Ini baris ketiga\n\n✅ Paragraf kedua dimulai di sini.\nDengan beberapa baris teks.\n\n🎯 Paragraf ketiga:\n• Point 1\n• Point 2\n• Point 3\n\nSelesai!"}'
+
+═══════════════════════════════════════════════════════════════════
+
+7️⃣  INFO BOT
+───────────────────────────────────────────────────────────────────
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"🤖 INFO BOT\n\nNama: WhatsApp Bot API\nVersi: 1.0.0\nStatus: Online ✅\n\nFitur:\n✅ Kirim ke nomor personal\n✅ Kirim ke grup\n✅ Broadcast\n✅ Kirim media\n\nDokumentasi lengkap tersedia!"}'
+
+═══════════════════════════════════════════════════════════════════
+
+8️⃣  TEST DENGAN TIMESTAMP
+───────────────────────────────────────────────────────────────────
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d "{\"group_name\":\"Test_bot\",\"message\":\"🕐 TEST MESSAGE\n\nDikirim pada: $(date '+%d/%m/%Y %H:%M:%S')\n\n✅ Pesan berhasil terkirim!\"}"
+
+═══════════════════════════════════════════════════════════════════
+
+9️⃣  PESAN CUSTOM (EDIT SENDIRI)
+───────────────────────────────────────────────────────────────────
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"TULIS PESAN ANDA DI SINI"}'
+
+═══════════════════════════════════════════════════════════════════
+
+🔟  LIST GRUP (CEK APAKAH Test_bot ADA)
+───────────────────────────────────────────────────────────────────
+
+curl http://localhost:3000/groups
+
+Atau dengan format pretty:
+
+curl -s http://localhost:3000/groups | jq .
+
+Atau cari grup Test_bot saja:
+
+curl -s http://localhost:3000/groups | jq '.groups[] | select(.name | contains("Test_bot"))'
+
+═══════════════════════════════════════════════════════════════════
+
+💡 TIPS PENGGUNAAN:
+
+1. Pastikan API server sudah running:
+   npm run api
+
+2. Pastikan bot sudah ready (scan QR jika perlu)
+
+3. Copy salah satu command di atas
+
+4. Paste di terminal dan tekan Enter
+
+5. Cek grup Test_bot untuk melihat pesan
+
+═══════════════════════════════════════════════════════════════════
+
+🔧 TROUBLESHOOTING:
+
+Error "Grup tidak ditemukan"?
+→ Cek apakah nama grup benar dengan:
+  curl http://localhost:3000/groups
+
+Error "Bot belum siap"?
+→ Tunggu sampai bot ready atau scan QR:
+  curl http://localhost:3000/status
+
+Error "Connection refused"?
+→ Pastikan API server running:
+  npm run api
+
+═══════════════════════════════════════════════════════════════════
+
+📋 TEMPLATE UNTUK CUSTOM MESSAGE:
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"[PESAN ANDA]"}'
+
+Ganti [PESAN ANDA] dengan teks yang ingin dikirim.
+
+Untuk multi-line, gunakan \n:
+
+curl -X POST http://localhost:3000/send-group-name \
+  -H "Content-Type: application/json" \
+  -d '{"group_name":"Test_bot","message":"Baris 1\nBaris 2\nBaris 3"}'
+
+═══════════════════════════════════════════════════════════════════
+
+🚀 QUICK TEST - ONE LINER:
+
+curl -X POST http://localhost:3000/send-group-name -H "Content-Type: application/json" -d '{"group_name":"Test_bot","message":"Quick test!"}'
+
+═══════════════════════════════════════════════════════════════════
+
+✅ SIAP DIGUNAKAN!
+
+Pilih salah satu command di atas, copy, paste ke terminal, dan tekan Enter!
+
+═══════════════════════════════════════════════════════════════════
