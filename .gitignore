@@ -1,6 +1,10 @@
 node_modules/
 .wwebjs_auth/
+.wwebjs_auth_temp/
+.wwebjs_auth.bak-*/
+.wwebjs_auth_temp.bak-*/
 .wwebjs_cache/
+qr.png
 package-lock.json
 .env
 *.log

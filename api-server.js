@@ -3,9 +3,12 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
+
+const { toChatId, toGroupId } = require('./utils/phone');
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Middleware
 app.use(cors());
@@ -23,12 +26,21 @@ const client = new Client({
 
 let isReady = false;
 let qrCodeData = null;
+let qrImageData = null;
 
 // WhatsApp Events
-client.on('qr', (qr) => {
+client.on('qr', async (qr) => {
     console.log('📱 QR Code Generated! Scan dengan WhatsApp:');
     qrcode.generate(qr, { small: true });
     qrCodeData = qr;
+
+    try {
+        qrImageData = await QRCode.toDataURL(qr, { width: 360, margin: 2 });
+        console.log(`🖼️  Buka http://localhost:${PORT}/qr-page di browser untuk scan QR.`);
+    } catch (error) {
+        qrImageData = null;
+        console.error('⚠️  Gagal membuat gambar QR:', error.message);
+    }
 });
 
 client.on('authenticated', () => {
@@ -39,6 +51,7 @@ client.on('ready', () => {
     console.log('✅ WhatsApp Bot siap digunakan!');
     isReady = true;
     qrCodeData = null;
+    qrImageData = null;
 });
 
 client.on('disconnected', (reason) => {
@@ -46,9 +59,17 @@ client.on('disconnected', (reason) => {
     isReady = false;
 });
 
+client.on('auth_failure', (message) => {
+    console.error('❌ Autentikasi gagal:', message);
+    isReady = false;
+});
+
 // Initialize WhatsApp
 console.log('🚀 Memulai WhatsApp Bot API Server...');
-client.initialize();
+client.initialize().catch((error) => {
+    console.error('❌ Gagal menjalankan WhatsApp client:', error.message);
+    process.exit(1);
+});
 
 // ============================================
 // API ROUTES
@@ -69,7 +90,8 @@ app.get('/', (req, res) => {
             groups: 'GET /groups',
             send_group: 'POST /send-group',
             send_group_name: 'POST /send-group-name',
-            qr: 'GET /qr'
+            qr: 'GET /qr',
+            qr_page: 'GET /qr-page'
         }
     });
 });
@@ -89,6 +111,7 @@ app.get('/qr', (req, res) => {
         res.json({
             success: true,
             qr: qrCodeData,
+            qr_image: qrImageData,
             message: 'Scan QR code ini dengan WhatsApp Anda'
         });
     } else if (isReady) {
@@ -104,6 +127,62 @@ app.get('/qr', (req, res) => {
     }
 });
 
+// 3b. Halaman scan QR (buka di browser)
+app.get('/qr-page', (req, res) => {
+    res.type('html').send(`<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scan QR - WhatsApp Bot</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; margin: 0;
+         display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .card { background: #fff; border-radius: 16px; padding: 32px 40px; text-align: center;
+          box-shadow: 0 8px 30px rgba(0,0,0,.12); max-width: 420px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { color: #667781; font-size: 14px; margin: 8px 0 20px; line-height: 1.5; }
+  img { width: 300px; height: 300px; image-rendering: pixelated; }
+  .ok { color: #16a34a; font-weight: 600; font-size: 18px; }
+  .hint { font-size: 12px; color: #8696a0; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Hubungkan WhatsApp</h1>
+    <p>Buka WhatsApp di HP &rarr; <b>Perangkat Tertaut</b> &rarr; <b>Tautkan Perangkat</b>, lalu scan QR di bawah.</p>
+    <div id="content"><p>Memuat QR...</p></div>
+    <div class="hint" id="hint">Halaman ini memperbarui QR otomatis.</div>
+  </div>
+<script>
+  let lastQr = null;
+  async function refresh() {
+    try {
+      const res = await fetch('/qr', { cache: 'no-store' });
+      const data = await res.json();
+      const content = document.getElementById('content');
+      if (data.qr_image) {
+        if (data.qr_image !== lastQr) {
+          lastQr = data.qr_image;
+          content.innerHTML = '<img alt="QR WhatsApp" src="' + data.qr_image + '">';
+        }
+      } else if (data.success && !data.qr) {
+        content.innerHTML = '<p class="ok">✅ WhatsApp sudah tersambung!</p>';
+        document.getElementById('hint').textContent = 'Tidak perlu scan QR lagi.';
+      } else {
+        content.innerHTML = '<p>Menunggu QR dari WhatsApp...</p>';
+      }
+    } catch (e) {
+      document.getElementById('content').innerHTML = '<p>Gagal memuat QR. Coba refresh halaman.</p>';
+    }
+  }
+  refresh();
+  setInterval(refresh, 3000);
+</script>
+</body>
+</html>`);
+});
+
 // 4. Send Message (ENDPOINT UTAMA)
 app.post('/send', async (req, res) => {
     try {
@@ -114,10 +193,11 @@ app.post('/send', async (req, res) => {
             });
         }
 
-        const { number, message } = req.body;
+        const { number, message } = req.body || {};
 
         // Validasi input
-        if (!number || !message) {
+        if (number === undefined || number === null || number === '' ||
+            message === undefined || message === null || String(message).trim() === '') {
             return res.status(400).json({
                 success: false,
                 error: 'Parameter "number" dan "message" wajib diisi',
@@ -129,24 +209,23 @@ app.post('/send', async (req, res) => {
         }
 
         // Format nomor
-        let formattedNumber = number.replace(/\D/g, ''); // Hapus non-digit
-
-        // Jika diawali 0, ganti dengan 62
-        if (formattedNumber.startsWith('0')) {
-            formattedNumber = '62' + formattedNumber.substring(1);
+        let numberId;
+        try {
+            numberId = toChatId(number);
+        } catch (error) {
+            return res.status(400).json({
+                success: false,
+                error: error.message,
+                example: { number: '089509844606' }
+            });
         }
 
-        // Jika tidak diawali 62, tambahkan 62 (asumsi Indonesia)
-        if (!formattedNumber.startsWith('62')) {
-            formattedNumber = '62' + formattedNumber;
-        }
-
-        const numberId = `${formattedNumber}@c.us`;
+        const text = String(message);
 
         console.log(`📤 Mengirim pesan ke ${numberId}...`);
 
         // Kirim pesan
-        await client.sendMessage(numberId, message);
+        await client.sendMessage(numberId, text);
 
         console.log(`✅ Pesan terkirim ke ${number}`);
 
@@ -156,7 +235,7 @@ app.post('/send', async (req, res) => {
             data: {
                 to: number,
                 formatted: numberId,
-                message: message,
+                message: text,
                 timestamp: new Date().toISOString()
             }
         });
@@ -181,31 +260,49 @@ app.post('/send-media', async (req, res) => {
             });
         }
 
-        const { number, media_url, caption } = req.body;
+        const { number, media_url, caption } = req.body || {};
 
-        if (!number || !media_url) {
+        if (number === undefined || number === null || number === '' ||
+            media_url === undefined || media_url === null || media_url === '') {
             return res.status(400).json({
                 success: false,
                 error: 'Parameter "number" dan "media_url" wajib diisi'
             });
         }
 
+        // Validasi URL media
+        let mediaUrl;
+        try {
+            mediaUrl = new URL(String(media_url));
+            if (!['http:', 'https:'].includes(mediaUrl.protocol)) {
+                throw new Error('Protokol harus http atau https');
+            }
+        } catch (error) {
+            return res.status(400).json({
+                success: false,
+                error: `Parameter "media_url" tidak valid: ${error.message}`
+            });
+        }
+
         // Format nomor
-        let formattedNumber = number.replace(/\D/g, '');
-        if (formattedNumber.startsWith('0')) {
-            formattedNumber = '62' + formattedNumber.substring(1);
+        let numberId;
+        try {
+            numberId = toChatId(number);
+        } catch (error) {
+            return res.status(400).json({
+                success: false,
+                error: error.message
+            });
         }
-        if (!formattedNumber.startsWith('62')) {
-            formattedNumber = '62' + formattedNumber;
-        }
-        const numberId = `${formattedNumber}@c.us`;
+
+        const mediaCaption = caption === undefined || caption === null ? '' : String(caption);
 
         console.log(`📤 Mengirim media ke ${numberId}...`);
 
         // Download dan kirim media
-        const media = await MessageMedia.fromUrl(media_url);
+        const media = await MessageMedia.fromUrl(mediaUrl.href, { unsafeMime: true });
         await client.sendMessage(numberId, media, {
-            caption: caption || ''
+            caption: mediaCaption
         });
 
         console.log(`✅ Media terkirim ke ${number}`);
@@ -215,8 +312,8 @@ app.post('/send-media', async (req, res) => {
             message: 'Media berhasil dikirim',
             data: {
                 to: number,
-                media_url: media_url,
-                caption: caption || '',
+                media_url: mediaUrl.href,
+                caption: mediaCaption,
                 timestamp: new Date().toISOString()
             }
         });
@@ -241,10 +338,10 @@ app.post('/broadcast', async (req, res) => {
             });
         }
 
-        const { numbers, message } = req.body;
+        const { numbers, message } = req.body || {};
 
         // Validasi
-        if (!numbers || !Array.isArray(numbers) || numbers.length === 0) {
+        if (!Array.isArray(numbers) || numbers.length === 0) {
             return res.status(400).json({
                 success: false,
                 error: 'Parameter "numbers" harus berupa array',
@@ -255,12 +352,14 @@ app.post('/broadcast', async (req, res) => {
             });
         }
 
-        if (!message) {
+        if (message === undefined || message === null || String(message).trim() === '') {
             return res.status(400).json({
                 success: false,
                 error: 'Parameter "message" wajib diisi'
             });
         }
+
+        const text = String(message);
 
         console.log(`📤 Broadcast ke ${numbers.length} nomor...`);
 
@@ -269,16 +368,9 @@ app.post('/broadcast', async (req, res) => {
         for (const number of numbers) {
             try {
                 // Format nomor
-                let formattedNumber = number.replace(/\D/g, '');
-                if (formattedNumber.startsWith('0')) {
-                    formattedNumber = '62' + formattedNumber.substring(1);
-                }
-                if (!formattedNumber.startsWith('62')) {
-                    formattedNumber = '62' + formattedNumber;
-                }
-                const numberId = `${formattedNumber}@c.us`;
+                const numberId = toChatId(number);
 
-                await client.sendMessage(numberId, message);
+                await client.sendMessage(numberId, text);
 
                 results.push({
                     number: number,
@@ -304,8 +396,8 @@ app.post('/broadcast', async (req, res) => {
         const failedCount = results.filter(r => r.status === 'failed').length;
 
         res.json({
-            success: true,
-            message: 'Broadcast selesai',
+            success: successCount > 0,
+            message: successCount > 0 ? 'Broadcast selesai' : 'Broadcast gagal dikirim ke semua nomor',
             summary: {
                 total: numbers.length,
                 success: successCount,
@@ -374,10 +466,11 @@ app.post('/send-group', async (req, res) => {
             });
         }
 
-        const { group_id, message } = req.body;
+        const { group_id, message } = req.body || {};
 
         // Validasi
-        if (!group_id || !message) {
+        if (group_id === undefined || group_id === null || group_id === '' ||
+            message === undefined || message === null || String(message).trim() === '') {
             return res.status(400).json({
                 success: false,
                 error: 'Parameter "group_id" dan "message" wajib diisi',
@@ -385,10 +478,22 @@ app.post('/send-group', async (req, res) => {
             });
         }
 
-        console.log(`📤 Mengirim pesan ke grup ${group_id}...`);
+        let groupId;
+        try {
+            groupId = toGroupId(group_id);
+        } catch (error) {
+            return res.status(400).json({
+                success: false,
+                error: error.message
+            });
+        }
+
+        const text = String(message);
+
+        console.log(`📤 Mengirim pesan ke grup ${groupId}...`);
 
         // Kirim pesan ke grup
-        await client.sendMessage(group_id, message);
+        await client.sendMessage(groupId, text);
 
         console.log(`✅ Pesan terkirim ke grup`);
 
@@ -396,8 +501,8 @@ app.post('/send-group', async (req, res) => {
             success: true,
             message: 'Pesan berhasil dikirim ke grup',
             data: {
-                group_id: group_id,
-                message: message,
+                group_id: groupId,
+                message: text,
                 timestamp: new Date().toISOString()
             }
         });
@@ -423,10 +528,11 @@ app.post('/send-group-name', async (req, res) => {
             });
         }
 
-        const { group_name, message } = req.body;
+        const { group_name, message } = req.body || {};
 
         // Validasi
-        if (!group_name || !message) {
+        if (group_name === undefined || group_name === null || String(group_name).trim() === '' ||
+            message === undefined || message === null || String(message).trim() === '') {
             return res.status(400).json({
                 success: false,
                 error: 'Parameter "group_name" dan "message" wajib diisi',
@@ -437,19 +543,22 @@ app.post('/send-group-name', async (req, res) => {
             });
         }
 
-        console.log(`🔍 Mencari grup dengan nama: ${group_name}...`);
+        const groupName = String(group_name);
+        const text = String(message);
+
+        console.log(`🔍 Mencari grup dengan nama: ${groupName}...`);
 
         // Cari grup berdasarkan nama
         const chats = await client.getChats();
         const group = chats.find(chat =>
             chat.isGroup &&
-            chat.name.toLowerCase().includes(group_name.toLowerCase())
+            (chat.name || '').toLowerCase().includes(groupName.toLowerCase())
         );
 
         if (!group) {
             return res.status(404).json({
                 success: false,
-                error: `Grup dengan nama "${group_name}" tidak ditemukan`,
+                error: `Grup dengan nama "${groupName}" tidak ditemukan`,
                 help: 'Gunakan GET /groups untuk melihat daftar grup'
             });
         }
@@ -458,7 +567,7 @@ app.post('/send-group-name', async (req, res) => {
         console.log(`📤 Mengirim pesan...`);
 
         // Kirim pesan
-        await client.sendMessage(group.id._serialized, message);
+        await client.sendMessage(group.id._serialized, text);
 
         console.log(`✅ Pesan terkirim ke grup ${group.name}`);
 
@@ -468,7 +577,7 @@ app.post('/send-group-name', async (req, res) => {
             data: {
                 group_id: group.id._serialized,
                 group_name: group.name,
-                message: message,
+                message: text,
                 timestamp: new Date().toISOString()
             }
         });
@@ -483,8 +592,32 @@ app.post('/send-group-name', async (req, res) => {
     }
 });
 
+// ============================================
+// 404 & ERROR HANDLER
+// ============================================
+
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        error: `Endpoint ${req.method} ${req.path} tidak ditemukan`,
+        help: 'Lihat GET / untuk daftar endpoint yang tersedia'
+    });
+});
+
+app.use((error, req, res, next) => {
+    console.error('❌ Unhandled error:', error);
+    if (res.headersSent) {
+        return next(error);
+    }
+    res.status(500).json({
+        success: false,
+        error: 'Terjadi kesalahan pada server',
+        details: error.message
+    });
+});
+
 // Start Server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log('');
     console.log('═══════════════════════════════════════════════════');
     console.log('🚀 WhatsApp Bot API Server berjalan!');
@@ -495,6 +628,7 @@ app.listen(PORT, () => {
     console.log(`   GET  http://localhost:${PORT}/               - Info API`);
     console.log(`   GET  http://localhost:${PORT}/status         - Cek status bot`);
     console.log(`   GET  http://localhost:${PORT}/qr             - Dapatkan QR code`);
+    console.log(`   GET  http://localhost:${PORT}/qr-page        - Scan QR via browser`);
     console.log(`   POST http://localhost:${PORT}/send           - Kirim pesan`);
     console.log(`   POST http://localhost:${PORT}/send-media     - Kirim media`);
     console.log(`   POST http://localhost:${PORT}/broadcast      - Broadcast`);
@@ -508,4 +642,39 @@ app.listen(PORT, () => {
     console.log('        -d \'{"number":"089509844606","message":"Test"}\'');
     console.log('═══════════════════════════════════════════════════');
     console.log('');
+});
+
+// Graceful shutdown agar session WhatsApp tidak korup
+let shuttingDown = false;
+
+async function shutdown(signal) {
+    if (shuttingDown) {
+        return;
+    }
+    shuttingDown = true;
+
+    console.log(`\n🛑 Menerima ${signal}, menutup server...`);
+
+    const forceExit = setTimeout(() => {
+        console.error('⚠️  Penutupan terlalu lama, memaksa keluar.');
+        process.exit(1);
+    }, 10000);
+    forceExit.unref();
+
+    server.close(async () => {
+        try {
+            await client.destroy();
+        } catch (error) {
+            console.error('❌ Gagal menutup WhatsApp client:', error.message);
+        }
+        clearTimeout(forceExit);
+        console.log('✅ Server ditutup dengan rapi.');
+        process.exit(0);
+    });
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('unhandledRejection', (reason) => {
+    console.error('❌ Unhandled promise rejection:', reason);
 });

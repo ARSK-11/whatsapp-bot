@@ -57,10 +57,29 @@ Bot WhatsApp yang dibuat menggunakan `whatsapp-web.js` dengan berbagai fitur men
    - Tap "Link a Device"
    - Scan QR code di terminal
 
+   QR juga otomatis disimpan sebagai file **`qr.png`** di folder project, jadi bisa dibuka/di-scan dari layar jika QR di terminal kurang jelas.
+
+   Jika memakai REST API, buka **http://localhost:3000/qr-page** di browser untuk melihat QR yang bisa di-scan.
+
+## 🔌 Koneksi WhatsApp Bermasalah?
+
+Jika QR tidak muncul, muncul error, atau bot minta scan terus:
+
+```bash
+npm run reset-session   # pindahkan session lama ke folder .bak-* (tidak dihapus)
+npm start               # jalankan ulang, lalu scan QR baru
+```
+
+Catatan penting:
+- Hanya boleh ada **satu** proses bot yang berjalan (jangan `npm start` dan `npm run api` bersamaan).
+- Session tersimpan di `.wwebjs_auth/`. Session lama/expired bisa membuat bot gagal menampilkan QR.
+- Versi `whatsapp-web.js` di project ini di-pin ke commit perbaikan `38eb45b` (24 Nov 2026) karena rilis npm 1.34.8 belum mendukung WhatsApp Web terbaru. Setelah versi baru dirilis di npm, dependency bisa dikembalikan ke `^1.34.9` atau lebih baru.
+
 ## 📋 Persyaratan
 
-- Node.js versi 14 atau lebih tinggi
+- Node.js versi 18 atau lebih tinggi
 - NPM atau Yarn
+- Google Chrome / Chromium terpasang
 - WhatsApp aktif di smartphone
 
 ## 🛠️ Teknologi yang Digunakan

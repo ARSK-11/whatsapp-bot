@@ -14,11 +14,25 @@ node api-server.js
 
 Server berjalan di: **http://localhost:3000**
 
+Port bisa diganti lewat environment variable, contoh: `PORT=8080 npm run api`.
+
+Nomor tujuan menerima beberapa format sekaligus dan otomatis dinormalisasi:
+`089509844606`, `89509844606`, `+62 895-0984-4606`, atau `6289509844606@c.us`.
+
 ---
 
 ## Langkah 2: Scan QR Code
 
 Saat pertama kali jalan, bot akan tampilkan QR code di terminal. Scan dengan WhatsApp.
+
+Cara paling mudah: buka **http://localhost:3000/qr-page** di browser, lalu scan QR yang muncul di halaman itu.
+
+Jika QR tidak muncul atau bot terus minta scan, reset session lama:
+
+```bash
+npm run reset-session
+npm run api
+```
 
 ---
 

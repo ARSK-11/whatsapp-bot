@@ -1,13 +1,12 @@
-const { Client, NoAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
-// Gunakan session directory berbeda agar tidak konflik
+// Gunakan session directory berbeda agar tidak konflik dengan bot utama
 const client = new Client({
-    authStrategy: new NoAuth(),
+    authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth_temp' }),
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        userDataDir: './.wwebjs_auth_temp'  // Directory berbeda
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     }
 });
 
@@ -53,9 +52,17 @@ client.on('ready', async () => {
 
 client.on('auth_failure', msg => {
     console.error('❌ Auth gagal:', msg);
+    process.exit(1);
+});
+
+client.on('disconnected', (reason) => {
+    console.log('❌ Client terputus:', reason);
 });
 
 console.log('🚀 Memulai pengiriman pesan...');
 console.log('📱 Target: 089509844606');
 console.log('');
-client.initialize();
+client.initialize().catch((error) => {
+    console.error('❌ Gagal menjalankan bot:', error.message);
+    process.exit(1);
+});

@@ -1,10 +1,12 @@
-// Script sederhana untuk kirim pesan
-// Gunakan ini jika bot sudah running di background
+// Script sederhana untuk membuat file pengiriman pesan ke 089509844606
+// Jalankan: node kirim-pesan-simple.js
 
-const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
-// Jika Anda punya REST API untuk bot, gunakan ini
-// Atau gunakan cara manual melalui perintah !send
+const projectDir = __dirname;
+const sourcePath = path.join(projectDir, 'send-direct.js');
+const targetPath = path.join(projectDir, 'send-to-089509844606.js');
 
 console.log('📤 CARA MENGIRIM PESAN KE 089509844606:\n');
 console.log('Karena bot sudah aktif, gunakan salah satu cara berikut:\n');
@@ -26,27 +28,32 @@ console.log('   - Nomor harus terdaftar di WhatsApp');
 console.log('   - Format: 62 + nomor tanpa 0 + @c.us');
 console.log('   - Contoh: 6289509844606@c.us\n');
 
-// Alternatif: Edit send-direct.js dengan nomor baru
-const fs = require('fs');
-const sendDirectPath = './send-direct.js';
+if (!fs.existsSync(sourcePath)) {
+    console.error(`❌ File sumber tidak ditemukan: ${sourcePath}`);
+    process.exit(1);
+}
 
-let content = fs.readFileSync(sendDirectPath, 'utf8');
+let content = fs.readFileSync(sourcePath, 'utf8');
 
 // Ganti nomor default dengan nomor baru
-content = content.replace(
+const withNumber = content.replace(
     /const nomorTujuan = '.*?@c\.us'/,
     "const nomorTujuan = '6289509844606@c.us'"
 );
 
 // Ganti pesan default
-content = content.replace(
+const withMessage = withNumber.replace(
     /await client\.sendMessage\(nomorTujuan, '.*?'\);/s,
     "await client.sendMessage(nomorTujuan, '👋 Halo! Ini pesan test dari bot WhatsApp.\\n\\n✅ Bot berhasil kirim pesan langsung!');"
 );
 
-fs.writeFileSync('./send-to-089509844606.js', content);
+if (withNumber === content || withMessage === withNumber) {
+    console.warn('⚠️  Sebagian pola tidak ditemukan di send-direct.js, file tetap dibuat.');
+}
 
-console.log('✅ File send-to-089509844606.js telah dibuat!');
+fs.writeFileSync(targetPath, withMessage);
+
+console.log(`✅ File ${path.basename(targetPath)} telah dibuat!`);
 console.log('📝 Untuk mengirim pesan otomatis:');
 console.log('   1. Pastikan tidak ada bot lain yang running');
 console.log('   2. Jalankan: node send-to-089509844606.js\n');

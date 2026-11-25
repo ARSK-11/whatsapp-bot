@@ -1,17 +1,29 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
+const path = require('path');
+
+const config = require('./config');
+const { toChatId } = require('./utils/phone');
+const { evaluateExpression } = require('./utils/calc');
 
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }
+    puppeteer: config.puppeteerOptions
 });
 
-client.on('qr', (qr) => {
+client.on('qr', async (qr) => {
     console.log('Scan QR code ini dengan WhatsApp:');
     qrcode.generate(qr, { small: true });
+
+    // Simpan juga sebagai gambar agar bisa dibuka/di-scan dari layar
+    try {
+        const qrPath = path.join(__dirname, 'qr.png');
+        await QRCode.toFile(qrPath, qr, { width: 360, margin: 2 });
+        console.log(`🖼️  QR juga disimpan di: ${qrPath}`);
+    } catch (error) {
+        console.error('⚠️  Gagal menyimpan qr.png:', error.message);
+    }
 });
 
 client.on('ready', () => {
@@ -27,6 +39,19 @@ client.on('auth_failure', msg => {
 });
 
 client.on('message', async (message) => {
+    try {
+        await handleMessage(message);
+    } catch (error) {
+        console.error('❌ Error saat memproses pesan:', error);
+    }
+});
+
+async function handleMessage(message) {
+    // Abaikan pesan dari bot sendiri dan status broadcast
+    if (message.fromMe || message.isStatus || message.from === 'status@broadcast') {
+        return;
+    }
+
     const chat = await message.getChat();
     const contact = await message.getContact();
 
@@ -75,7 +100,7 @@ Ketik perintah tanpa tanda kutip!
     else if (command === '!time') {
         const now = new Date();
         const timeStr = now.toLocaleString('id-ID', {
-            timeZone: 'Asia/Jakarta',
+            timeZone: config.timezone,
             dateStyle: 'full',
             timeStyle: 'long'
         });
@@ -122,6 +147,12 @@ Ketik perintah tanpa tanda kutip!
             if (quotedMsg.hasMedia) {
                 await message.reply('⏳ Membuat sticker...');
                 const media = await quotedMsg.downloadMedia();
+
+                if (!media) {
+                    await message.reply('❌ Gagal mengunduh media. Coba kirim ulang gambarnya.');
+                    return;
+                }
+
                 await client.sendMessage(message.from, media, { sendMediaAsSticker: true });
             } else {
                 await message.reply('❌ Pesan yang di-reply harus berisi gambar!');
@@ -133,13 +164,18 @@ Ketik perintah tanpa tanda kutip!
 
     else if (command === '!group') {
         if (chat.isGroup) {
+            const participants = chat.participants || [];
+            const createdAt = chat.createdAt
+                ? new Date(chat.createdAt * 1000).toLocaleDateString('id-ID')
+                : 'Tidak diketahui';
+
             const groupInfo = `
 📊 *Info Grup*
 
 Nama: ${chat.name}
 Deskripsi: ${chat.description || 'Tidak ada deskripsi'}
-Jumlah Member: ${chat.participants.length}
-Dibuat: ${new Date(chat.createdAt * 1000).toLocaleDateString('id-ID')}
+Jumlah Member: ${participants.length}
+Dibuat: ${createdAt}
             `.trim();
             await message.reply(groupInfo);
         } else {
@@ -149,14 +185,15 @@ Dibuat: ${new Date(chat.createdAt * 1000).toLocaleDateString('id-ID')}
 
     else if (command === '!tagall') {
         if (chat.isGroup) {
+            const participants = chat.participants || [];
             const authorNumber = message.author || message.from;
-            const author = chat.participants.find(p => p.id._serialized === authorNumber);
+            const author = participants.find(p => p.id._serialized === authorNumber);
 
-            if (author && author.isAdmin) {
-                let mentions = [];
+            if (author && (author.isAdmin || author.isSuperAdmin)) {
+                const mentions = [];
                 let text = '📢 *Pengumuman untuk semua member:*\n\n';
 
-                for (let participant of chat.participants) {
+                for (const participant of participants) {
                     mentions.push(participant.id._serialized);
                     text += `@${participant.id.user} `;
                 }
@@ -178,11 +215,7 @@ Dibuat: ${new Date(chat.createdAt * 1000).toLocaleDateString('id-ID')}
     else if (command.startsWith('!calculate ') || command.startsWith('!calc ')) {
         const expression = message.body.split(' ').slice(1).join(' ');
         try {
-            const allowedChars = /^[0-9+\-*/().\s]+$/;
-            if (!allowedChars.test(expression)) {
-                throw new Error('Karakter tidak valid');
-            }
-            const result = eval(expression);
+            const result = evaluateExpression(expression);
             await message.reply(`🧮 Hasil: ${expression} = *${result}*`);
         } catch (error) {
             await message.reply('❌ Perhitungan tidak valid! Contoh: !calc 10 + 5 * 2');
@@ -201,16 +234,16 @@ Dibuat: ${new Date(chat.createdAt * 1000).toLocaleDateString('id-ID')}
         const targetNumber = parts[1];
         const text = parts.slice(2).join(' ');
 
-        const numberId = targetNumber.includes('@c.us') ? targetNumber : `${targetNumber}@c.us`;
-
         try {
+            const numberId = toChatId(targetNumber);
+
             await message.reply('⏳ Mengirim pesan...');
             await client.sendMessage(numberId, text);
             await message.reply(`✅ Pesan berhasil dikirim ke ${targetNumber}`);
             console.log(`📤 Pesan dikirim ke ${numberId}: ${text}`);
         } catch (error) {
-            await message.reply('❌ Gagal mengirim pesan!\n\nPastikan:\n• Format nomor benar (628xxx)\n• Nomor terdaftar di WhatsApp');
-            console.error('Error sending message:', error);
+            await message.reply('❌ Gagal mengirim pesan!\n\nPastikan:\n• Format nomor benar (628xxx / 08xxx)\n• Nomor terdaftar di WhatsApp');
+            console.error('Error sending message:', error.message);
         }
     }
 
@@ -225,7 +258,7 @@ Dibuat: ${new Date(chat.createdAt * 1000).toLocaleDateString('id-ID')}
 
         const numbersString = parts[1];
         const text = parts.slice(2).join(' ');
-        const numbers = numbersString.split(',').map(n => n.trim());
+        const numbers = numbersString.split(',').map(n => n.trim()).filter(Boolean);
 
         await message.reply(`⏳ Mengirim broadcast ke ${numbers.length} nomor...`);
 
@@ -233,9 +266,9 @@ Dibuat: ${new Date(chat.createdAt * 1000).toLocaleDateString('id-ID')}
         let failed = 0;
 
         for (const number of numbers) {
-            const numberId = number.includes('@c.us') ? number : `${number}@c.us`;
-
             try {
+                const numberId = toChatId(number);
+
                 await client.sendMessage(numberId, text);
                 success++;
                 console.log(`✅ Broadcast terkirim ke ${numberId}`);
@@ -243,17 +276,20 @@ Dibuat: ${new Date(chat.createdAt * 1000).toLocaleDateString('id-ID')}
                 await new Promise(resolve => setTimeout(resolve, 2000));
             } catch (error) {
                 failed++;
-                console.error(`❌ Gagal kirim ke ${numberId}:`, error.message);
+                console.error(`❌ Gagal kirim ke ${number}:`, error.message);
             }
         }
 
         await message.reply(`📊 *Hasil Broadcast:*\n\n✅ Berhasil: ${success}\n❌ Gagal: ${failed}`);
     }
-});
+}
 
 client.on('disconnected', (reason) => {
     console.log('❌ Client terputus:', reason);
 });
 
 console.log('🚀 Memulai bot WhatsApp...');
-client.initialize();
+client.initialize().catch((error) => {
+    console.error('❌ Gagal menjalankan bot:', error.message);
+    process.exit(1);
+});
